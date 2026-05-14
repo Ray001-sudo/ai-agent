@@ -19,7 +19,7 @@ The agent browses government portals, NGOs, UN agencies, and private procurement
 
 ### 1. Clone and configure
 ```bash
-[git clone https://github.com/yourname/tenderpro-ai-agent.git](https://github.com/Ray001-sudo/ai-agent.git)
+git clone https://github.com/yourname/tenderpro-ai-agent.git
 cd tenderpro-ai-agent/tenderpro
 cp backend/.env.example backend/.env
 # Open backend/.env and fill in your API keys

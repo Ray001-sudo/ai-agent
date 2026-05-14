@@ -1,0 +1,94 @@
+version: '3.9'
+
+services:
+  # ── MongoDB ────────────────────────────────────────────────────────────────
+  mongo:
+    image: mongo:7.0
+    container_name: tenderpro-mongo
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: tenderpro
+    networks: [tenderpro]
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ──────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    container_name: tenderpro-redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks: [tenderpro]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ── Backend (Node.js) ──────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: infrastructure/Dockerfile.backend
+    container_name: tenderpro-backend
+    restart: unless-stopped
+    depends_on:
+      mongo: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    env_file: ./backend/.env
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/tenderpro
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: production
+    volumes:
+      - uploads_data:/app/backend/uploads
+      - ./logs:/app/logs
+    networks: [tenderpro]
+    ports:
+      - "5000:5000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Frontend (Nginx serving React build) ──────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: infrastructure/Dockerfile.frontend
+    container_name: tenderpro-frontend
+    restart: unless-stopped
+    depends_on: [backend]
+    networks: [tenderpro]
+    ports:
+      - "3000:80"
+
+  # ── Nginx reverse proxy ───────────────────────────────────────────────────
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: tenderpro-nginx
+    restart: unless-stopped
+    depends_on: [backend, frontend]
+    volumes:
+      - ./infrastructure/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks: [tenderpro]
+    ports:
+      - "80:80"
+      - "443:443"
+
+volumes:
+  mongo_data:
+  redis_data:
+  uploads_data:
+
+networks:
+  tenderpro:
+    driver: bridge
